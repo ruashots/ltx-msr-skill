@@ -159,14 +159,19 @@ def main():
         if n.get("class_type") == "Seed (rgthree)":
             n["inputs"]["seed"] = args.seed
     j[N_OUT]["inputs"]["filename_prefix"] = args.prefix
+    # keep ComfyUI's output folder clean: render to temp (auto-cleaned) and skip the
+    # workflow-snapshot PNG. The single deliverable is --out; nothing lingers in output/.
+    j[N_OUT]["inputs"]["save_output"] = False
+    j[N_OUT]["inputs"]["save_metadata"] = False
 
     # submit
     pid = api(args.comfy_url, "/prompt", {"prompt": j}).get("prompt_id")
     if not pid: die("no prompt_id returned")
     print(f"submitted {pid} (quality={args.quality} res={res} dur={args.duration}s)")
 
-    # poll
-    fn = None
+    # poll — VHS emits both a silent .mp4 and a muxed -audio.mp4; prefer the audio one,
+    # and use the file's actual type (temp/output) since we render to temp.
+    out = None  # (type, subfolder, filename)
     while True:
         time.sleep(8)
         hist = api(args.comfy_url, f"/history/{pid}")
@@ -174,18 +179,20 @@ def main():
         h = list(hist.values())[0]
         st = h.get("status", {}).get("status_str")
         if st == "success":
-            for o in h.get("outputs", {}).values():
-                for v in o.get("gifs", []):
-                    if v.get("filename", "").endswith(".mp4"):
-                        fn = (v.get("subfolder", ""), v["filename"]); break
+            cands = [v for o in h.get("outputs", {}).values()
+                     for v in o.get("gifs", []) if v.get("filename", "").endswith(".mp4")]
+            pick = ([v for v in cands if v["filename"].endswith("-audio.mp4")] or cands or [None])[0]
+            if pick:
+                out = (pick.get("type", "temp"), pick.get("subfolder", ""), pick["filename"])
             break
         if st == "error":
             die("render failed — check ComfyUI's user/comfyui.log (a 35ms 'success' usually means a "
                 "validation error on an output node that ComfyUI silently ignored).")
 
-    if not fn: die("render finished but no mp4 output found")
-    sub, name = fn
-    q = f"filename={urllib.parse.quote(name)}&subfolder={urllib.parse.quote(sub)}&type=output"
+    if not out: die("render finished but no mp4 output found")
+    typ, sub, name = out
+    q = (f"filename={urllib.parse.quote(name)}&subfolder={urllib.parse.quote(sub)}"
+         f"&type={urllib.parse.quote(typ)}")
     raw = os.path.join(tmp, "raw.mp4")
     urllib.request.urlretrieve(args.comfy_url.rstrip("/") + "/view?" + q, raw)
 
