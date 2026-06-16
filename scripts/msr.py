@@ -120,10 +120,14 @@ def main():
     ap.add_argument("--seed", type=int, default=12345)
     ap.add_argument("--out", required=True, help="output mp4 path")
     ap.add_argument("--comfy-url", default=os.environ.get("COMFY_URL", "http://127.0.0.1:8188"))
-    ap.add_argument("--prefix", default="msr/out")
+    ap.add_argument("--prefix", default=None,
+                    help="output name in ComfyUI's output/ folder. Defaults to msr/<--out basename>, so the "
+                         "run's files (video + -audio + workflow .png) are recognizable by the clip name.")
     args = ap.parse_args()
 
     res, sigmas, distill = QUALITY[args.quality]
+    # name the run's output/ files after the deliverable so they're recognizable + reproducible
+    prefix = args.prefix or ("msr/" + os.path.splitext(os.path.basename(args.out))[0])
     indir = win_input_dir()
     tmp = tempfile.mkdtemp(prefix="msr_")
 
@@ -158,11 +162,9 @@ def main():
     for nid, n in j.items():
         if n.get("class_type") == "Seed (rgthree)":
             n["inputs"]["seed"] = args.seed
-    j[N_OUT]["inputs"]["filename_prefix"] = args.prefix
-    # keep ComfyUI's output folder clean: render to temp (auto-cleaned) and skip the
-    # workflow-snapshot PNG. The single deliverable is --out; nothing lingers in output/.
-    j[N_OUT]["inputs"]["save_output"] = False
-    j[N_OUT]["inputs"]["save_metadata"] = False
+    j[N_OUT]["inputs"]["filename_prefix"] = prefix
+    # plain: the workflow saves to output/<prefix> with ComfyUI's default naming
+    # (video + -audio + workflow .png). No post-management of the output folder.
 
     # submit
     pid = api(args.comfy_url, "/prompt", {"prompt": j}).get("prompt_id")
