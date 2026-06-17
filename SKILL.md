@@ -57,18 +57,20 @@ python3 ~/.claude/skills/msr/scripts/msr.py \
 All tiers work at full res — **resolution is NOT the cause of the elongation/duplication** (that was
 a wrong theory; same-res renders went both clean and broken). The real cause is reference aspect ↓.
 
-**⚠ THE BIG ONE — reference aspect must match the OUTPUT aspect.** The `LiconMSR` node anamorphically
-resizes EVERY reference to the render canvas W×H (pure `cv2.resize`, no aspect preserve, no crop —
-confirmed in its source). So a **wide horizontal turnaround sheet feeding a tall 9:16 video** breaks
-the subject:
-- if the wide sheet is stretched to the tall canvas → subject **ELONGATES** (tall & thin);
-- if you pre-letterbox the wide sheet → it shrinks to a strip and the model **DUPLICATES** it (stacked figures).
-Higher res just amplifies the elongation; it is not the root cause.
-**Fix (confirmed 2026-06):** author references in the OUTPUT aspect — a **single portrait view** or a
-**vertically-stacked** multi-view, NOT a 5-across horizontal sheet. `msr.py` now auto-fits every ref
-(letterbox) to the exact canvas so it can't stretch, and warns if a ref's aspect is far from the
-canvas — but the auto-fit can't rescue a wide sheet (it'll duplicate), so make the ref portrait. A
-genuine 2nd *distinct* subject also renders clean at high res. This works at any tier, full res.
+**⚠ THE BIG ONE — a reference must LIVE INSIDE WHAT YOU'RE OUTPUTTING.** It must match the output
+frame's aspect and fill it (portrait video → portrait ref; landscape video → landscape ref). The
+`LiconMSR` node anamorphically resizes EVERY reference to the render canvas W×H (pure `cv2.resize`,
+no aspect preserve, no crop — confirmed in its source). So a **mismatched ref** — classically a wide
+5-across turnaround sheet feeding a tall 9:16 video — breaks the subject:
+- stretched to the tall canvas → subject **ELONGATES** (tall & thin);
+- pre-letterboxed → it shrinks to a strip and the model **DUPLICATES** it (stacked figures).
+Resolution/tier/duration/motion were all tested and ruled out — it's purely the ref↔output aspect.
+**Fix (confirmed 2026-06):** build references in the OUTPUT aspect, filling the frame — a single view,
+or multi-view stacked along the SHORT axis (vertically for portrait), NOT views in a row. `msr.py`
+auto-fits every ref (letterbox) to the exact canvas and warns on an aspect mismatch — but the auto-fit
+can't rescue a mismatched sheet (it'll duplicate), so author the ref to fit. A 2nd *distinct* subject
+also renders clean. **Confirmed both ways:** a properly-shaped ref lands clean in the new driver AND
+in the original workflow — the reference shape is the lever, not the graph version.
 
 > **LEGACY (2026-06-17):** the ORIGINAL skill + workflow (git `51275b7`, untouched `assets/msr_base.json`)
 > produced the known-good *2-distinct-subject* render `c4614dbe`. The 2026-06-17 changes (dynamic

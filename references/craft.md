@@ -54,12 +54,12 @@ The word "cinematic" does nothing. Cinematic = **vocabulary + intention**. Build
 - **A 3-5 colour palette** named in the global ("teal, magenta, amber, wet black") — cheapest "graded film" upgrade.
 - **Counted-beat action** in `--segments` — this is the fix for the held-pose default. Write a tiny **beginning → middle → end micro-arc** across the clip (e.g. "stands, breathing | jaw sets, gaze lifts | turns to lens, exhales"). Forces motion instead of a frozen mood shot.
 - **Orientation**: profile / three-quarter beats front-on for naturalism (see front-bias note).
-- **Subject elongation/duplication = REFERENCE ASPECT, not resolution or motion.** If the subject
-  comes out stretched tall or stacked/duplicated, your reference's aspect doesn't match the output.
-  The MSR node anamorphically resizes refs to the canvas, so a WIDE turnaround sheet → TALL 9:16
-  video tears the subject. **Author references in the output aspect** — a single portrait view or a
-  vertically-stacked multi-view, never a 5-across horizontal sheet. (Resolution and aerial motion
-  were both tested and ruled out; see SKILL.md.)
+- **A reference must LIVE INSIDE WHAT YOU'RE OUTPUTTING.** If the subject comes out stretched tall or
+  stacked/duplicated, the reference's aspect doesn't match the output frame. The MSR node anamorphically
+  resizes refs to the canvas, so any mismatch (classically a WIDE turnaround sheet → TALL 9:16 video)
+  tears the subject. **Build refs in the output aspect and fill the frame** — a single view, or multi-view
+  stacked along the SHORT axis (vertically for portrait); never views in a row for vertical video.
+  (Resolution, tier, duration and motion were all tested and ruled out; see SKILL.md.)
 
 ## Scroll-stopper rules (if it's for socials, not just a demo)
 A gorgeous moving portrait is a **tool demo**, not **content**. To earn the tap:

@@ -12,11 +12,12 @@ Usage:
          --segments "she scrolls her phone | she glances at the crew | she shifts, bored" \
          --audio track.wav --ambient --quality cinematic --duration 10 --out out.mp4
 
-Reference images: each subject ref MUST be a PORTRAIT subject that FILLS a ~9:16 frame — a single
-portrait view, or multi-view stacked VERTICALLY. A WIDE horizontal turnaround sheet (views in a row)
-breaks portrait output: the node anamorphically resizes refs to the canvas, so a wide sheet either
-stretches the subject (tall/thin) or, once letterboxed, becomes a thin strip the model DUPLICATES
-(stacked bodies). Recognizable IP -> `chatgpt-images`; original characters -> `ideogram4`.
+Reference images — THE RULE: a reference must LIVE INSIDE WHAT YOU'RE OUTPUTTING. It must match the
+output frame's aspect and fill it (portrait video -> portrait ref; landscape video -> landscape ref).
+The node anamorphically resizes every ref to the canvas, so a mismatched ref (e.g. a WIDE horizontal
+turnaround sheet into a tall 9:16 video) either stretches the subject (tall/thin) or, once letterboxed,
+becomes a thin strip the model DUPLICATES (stacked bodies). So build multi-view sheets stacked along
+the SHORT axis (vertically for portrait), or use a single view. IP -> `chatgpt-images`; original -> `ideogram4`.
 
 LEGACY NOTE (2026-06-17): the ORIGINAL skill + workflow (git tag/commit 51275b7 "Plain reproducible
 output", + the untouched assets/msr_base.json) is what produced the known-good 2-distinct-subject
@@ -55,8 +56,8 @@ QUALITY = {
 # problem (that was a wrong theory — same-res renders went both clean and broken). The real cause is
 # REFERENCE ASPECT: LiconMSR anamorphically resizes each ref to the canvas, so a wide turnaround sheet
 # into a tall 9:16 video tears the subject. fit_letterbox() (in staging) pre-fits refs to the canvas to
-# stop the stretch, and _warn_wide_ref() flags wide refs — but author refs in the OUTPUT aspect
-# (single portrait view or vertically-stacked), since a wide sheet duplicates even when letterboxed.
+# stop the stretch, and _warn_ref_aspect() flags refs whose aspect doesn't match the output — but author refs in the OUTPUT aspect
+# the ref must MATCH THE OUTPUT ASPECT and fill it; a mismatched (e.g. wide) sheet duplicates even when letterboxed.
 # (Root-caused 2026-06: confirmed in licon_msr.py cv2.resize-to-canvas + a portrait-vs-wide-ref A/B.)
 
 def die(msg, code=1):
@@ -91,19 +92,19 @@ def host_path(p):
             pass
     return p
 
-def _warn_wide_ref(path, CW, CH):
-    """HARD-warn when a subject ref is LANDSCAPE (or much wider than the portrait canvas). A wide
-    turnaround sheet can't be saved by any fit for portrait video: letterboxed it shrinks to a thin
-    strip and the model DUPLICATES the subject (stacked figures). Author refs as a PORTRAIT subject
-    that fills a ~9:16 frame — a single portrait view, or views stacked VERTICALLY."""
+def _warn_ref_aspect(path, CW, CH):
+    """HARD-warn when a subject ref's aspect doesn't match the output frame. THE RULE: a reference must
+    "live inside what you're outputting" — same aspect as the canvas, filling it. The node resizes every
+    ref to the canvas anamorphically, so a mismatched ref is stretched (squashed → tall/thin) or, once
+    letterboxed, shrinks to a strip and the model DUPLICATES the subject (stacked figures). Orientation-
+    agnostic: portrait video → portrait ref; landscape video → landscape ref."""
     from PIL import Image
     w, h = Image.open(path).size
-    canvas_is_portrait = CH >= CW
-    if (w > h) or (canvas_is_portrait and (w / h) > (CW / CH) + 0.25):
-        print(f"WARNING: reference {os.path.basename(path)} is landscape/wide (aspect {w/h:.2f}) but the "
-              f"canvas is portrait ({CW}x{CH}, {CW/CH:.2f}). A wide turnaround sheet WILL likely render a "
-              f"duplicated/stacked subject. Use a PORTRAIT reference (single view, or views stacked "
-              f"VERTICALLY) that fills the frame.", file=sys.stderr)
+    if abs((w / h) - (CW / CH)) > 0.20:
+        print(f"WARNING: reference {os.path.basename(path)} aspect {w/h:.2f} does not match the output "
+              f"canvas {CW/CH:.2f} ({CW}x{CH}). The ref must live INSIDE the output frame — same aspect, "
+              f"filling it — or the subject will stretch/duplicate. Re-author the ref to the output aspect "
+              f"(e.g. a single view, or views stacked along the SHORT axis).", file=sys.stderr)
 
 def canvas_dims(bg_path, res):
     """The exact render canvas (W,H): bg's longer edge -> res, both multiples of 32.
@@ -234,13 +235,13 @@ def main():
     tmp = tempfile.mkdtemp(prefix="msr_")
 
     # stage references — pre-fit EACH to the EXACT render canvas (letterbox, no stretch) so the node's
-    # resize is a no-op and LiconMSR can't anamorphically distort the subject. A subject ref MUST be a
-    # PORTRAIT subject that fills a ~9:16 frame (single view, or views stacked VERTICALLY) — _warn_wide_ref
-    # flags a landscape sheet, which can't be saved: letterboxed it becomes a thin strip and the model
-    # DUPLICATES it (stacked bodies). (Root-cause + fix nailed 2026-06; see SKILL.md.)
+    # resize is a no-op and LiconMSR can't anamorphically distort the subject. THE RULE: a ref must LIVE
+    # INSIDE THE OUTPUT FRAME — match the canvas aspect and fill it. _warn_ref_aspect flags a mismatched
+    # ref (e.g. a wide sheet into tall video), which can't be saved: letterboxed it becomes a thin strip
+    # and the model DUPLICATES it (stacked bodies). (Root-cause + fix nailed 2026-06; see SKILL.md.)
     CW, CH = canvas_dims(args.background, res)
-    _warn_wide_ref(args.subject1, CW, CH)
-    if args.subject2: _warn_wide_ref(args.subject2, CW, CH)
+    _warn_ref_aspect(args.subject1, CW, CH)
+    if args.subject2: _warn_ref_aspect(args.subject2, CW, CH)
     s1 = stage_image(fit_letterbox(args.subject1, CW, CH, os.path.join(tmp, "fit_s1.png")),
                      "msr_subject1.png", indir)
     bg = stage_image(fit_letterbox(args.background, CW, CH, os.path.join(tmp, "fit_bg.png")),
