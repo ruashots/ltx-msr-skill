@@ -39,8 +39,10 @@ python3 ~/.claude/skills/msr/scripts/msr.py \
   - *Cinematic / behind-the-scenes (no dancing):* pass `--ambient` — the script flattens the
     track into a low atmospheric bed (grounded motion), then **post-muxes the real track**
     over the finished video.
-- **Action ceiling = MEDIUM.** Walking, turning, posing, gesturing, smoking — good. Fast
-  sports/fighting/spins → smears, even at cinematic. Choreograph to medium.
+- **Action ceiling = MEDIUM.** Walking, turning, posing, gesturing, drawing a weapon, a punch
+  — good. Fast sports/fighting/spins → smears. (NOTE: aerial/ungrounded motion does NOT cause the
+  subject-duplication artifact — that was a falsified theory; an explicit "mid-air spin" rendered
+  clean. The duplication/elongation is a REFERENCE-ASPECT problem — see the quality-ladder section.)
 - **To kill the "acting at the camera" look, ORIENT the subject away** (profile / 3-4 /
   back) in the prompt text. "Don't look at the camera" alone *loses* to MSR's front-facing
   bias. (Fully back-turned in an empty set reads aimless — give a self-contained action like
@@ -50,8 +52,33 @@ python3 ~/.claude/skills/msr/scripts/msr.py \
 
 ## Quality ladder (`--quality`)
 `draft` 512/5-step (~9s, rough preview) · `fast` 768 · `standard` 1280 · `clean` 1536 ·
-`fluid` 1920 · `cinematic` 1920 + low-distill + 13 steps. Iterate on `draft/fast`, render
-the keeper at `cinematic`. **Render time scales with CLIP LENGTH** — cinematic at 10s ≈ 15 min.
+`fluid` 1920 · `max` 2048 · `cinematic` 1920. **Render time scales with CLIP LENGTH.**
+
+All tiers work at full res — **resolution is NOT the cause of the elongation/duplication** (that was
+a wrong theory; same-res renders went both clean and broken). The real cause is reference aspect ↓.
+
+**⚠ THE BIG ONE — reference aspect must match the OUTPUT aspect.** The `LiconMSR` node anamorphically
+resizes EVERY reference to the render canvas W×H (pure `cv2.resize`, no aspect preserve, no crop —
+confirmed in its source). So a **wide horizontal turnaround sheet feeding a tall 9:16 video** breaks
+the subject:
+- if the wide sheet is stretched to the tall canvas → subject **ELONGATES** (tall & thin);
+- if you pre-letterbox the wide sheet → it shrinks to a strip and the model **DUPLICATES** it (stacked figures).
+Higher res just amplifies the elongation; it is not the root cause.
+**Fix (confirmed 2026-06):** author references in the OUTPUT aspect — a **single portrait view** or a
+**vertically-stacked** multi-view, NOT a 5-across horizontal sheet. `msr.py` now auto-fits every ref
+(letterbox) to the exact canvas so it can't stretch, and warns if a ref's aspect is far from the
+canvas — but the auto-fit can't rescue a wide sheet (it'll duplicate), so make the ref portrait. A
+genuine 2nd *distinct* subject also renders clean at high res. This works at any tier, full res.
+
+> **LEGACY (2026-06-17):** the ORIGINAL skill + workflow (git `51275b7`, untouched `assets/msr_base.json`)
+> produced the known-good *2-distinct-subject* render `c4614dbe`. The 2026-06-17 changes (dynamic
+> subject count, letterbox ref-fit, hard wide-ref warning, container normalize) target the
+> *single-subject + wide-sheet* failures. If the new behavior looks off, `git show 51275b7:scripts/msr.py`
+> is the original driver, or pass two distinct portrait refs + `--raw-aspect` to mimic the original path.
+
+**Separately, the playback "stretch":** a correct render can still *look* stretched if the mp4 has
+unset SAR + an odd width. `msr.py` auto-normalizes output to a standard container (1080×1920, SAR 1:1),
+which fixes that. Independent of the reference-aspect issue above.
 
 ## Things that bite
 - **35-millisecond "success" with no video** → an output node failed validation and ComfyUI
@@ -61,6 +88,15 @@ the keeper at `cinematic`. **Render time scales with CLIP LENGTH** — cinematic
 - **Cinematic can come out *darker*, not brighter** — it can muddy a dark set. Light the
   subject in the background ref (a key-lit center spot) or lift exposure in post.
 - ComfyUI's built-in mp4 preview decodes to black collages — don't judge from it; use `watch-video`.
+- **`watch-video`'s collage itself goes BLACK on LTX mp4s.** Workaround: pull frames directly
+  with `ffmpeg -ss <t> -i clip.mp4 -frames:v 1 f.png` and `hstack` them into a strip to inspect.
+- **"It looks vertically stretched" is almost always the container, not the render.** Verify before
+  theorizing: push a plain circle through the SAME tier — it comes back round (≈1.0 w/h). The real
+  cause is unset SAR + an odd width confusing the player. `msr.py` now auto-normalizes the output to
+  a standard container with **SAR 1:1** (1080×1920 for 9:16); that's the fix. Don't chase it in the
+  render. (Root-caused 2026-06: tier aspect + container, NOT a generation bug.)
+- **Delivery = standard container.** Output is auto-scaled to 1080×1920 (9:16) / 1920×1080 / 1080×1080
+  with SAR 1:1 so it plays correctly everywhere. Pass `--raw-aspect` only if you need native render dims.
 
 See `references/install.md` for the one-time ComfyUI setup, `references/craft.md` for the
 full prompt patterns, and `HANDOFF.md` for the agent contract.
